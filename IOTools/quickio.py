@@ -1,23 +1,25 @@
-import cPickle, os, sys
+import cPickle, os, sys, gzip
 from scipy import io
 
-def write(filename, data, overwrite=False):
+def write(filename, data, overwrite=False, compress=True):
     """
         Write saves the contents of the given data dictionary object in the specified file
         using Python's Pickle.
         
-        Usage: write('filename.sav', dict_object, overwrite) # where overwrite is an optional boolean  
+        Usage: write('filename.sav', dict_object, overwrite, compress)
+        
+        The variables overwrite and compress are options variables.
         
         Returns True if succesful, otherwise False
         
     """
-    assert isinstance(filename, str), "The file name is required to be of type string.";
+    assert isinstance(filename, str), "The file name is required to be of type string."
     assert isinstance(data, dict), "The input data is required to be a dictionary."
-    assert not os.path.exists(filename) or overwrite, "The file already exists. To overwrite, set overwrite flag to True.";
+    assert not os.path.exists(filename) or overwrite, "The file already exists. To overwrite, set overwrite flag to True."
     
     # File exists. Delete file first
     if os.path.exists(filename):
-        os.remove(filename);
+        os.remove(filename)
     
     if filename.lower().endswith('.mat'):
         # MAT file
@@ -31,14 +33,20 @@ def write(filename, data, overwrite=False):
     else:
         # Any other type of file    
         try:
-            myFile = open(filename, 'w');
-            cPickle.dump(data, myFile);
-            myFile.close();
-            return True;
+            if compress:
+                # Compression active
+                myFile = gzip.open(filename, 'wb', compresslevel=3)
+                cPickle.dump(data, myFile, protocol = cPickle.HIGHEST_PROTOCOL)
+            else:
+                # Do not compress. Use standard algorithm
+                myFile = open(filename, 'w')
+                cPickle.dump(data, myFile)
+            myFile.close()
+            return True
         except BaseException, e:
-            print "An error occurred when attempting to write to the file \"" + filename + "\"";
-            print "Error: " + str(e);
-            return False;
+            print "An error occurred when attempting to write to the file \"" + filename + "\""
+            print "Error: " + str(e)
+            return False
 
 def read(filename):
     """
@@ -49,28 +57,40 @@ def read(filename):
         Returns a dictionary object of saves objects if successful, otherwise False
         
     """    
-    assert isinstance(filename, str), "The file name is required to be of type string.";
-    assert os.path.exists(filename), "The file to read does not exist.";
+    assert isinstance(filename, str), "The file name is required to be of type string."
+    assert os.path.exists(filename), "The file to read does not exist."
     
     if filename.lower().endswith('.mat'):
         # MAT file
         try:
             return io.loadmat(filename)
         except BaseException, e:
-            print "An error occurred when attempting to read the file \"" + filename + "\"";
-            print "Error: " + str(e);
-            return False;
+            print "An error occurred when attempting to read the file \"" + filename + "\""
+            print "Error: " + str(e)
+            return False
     else:
+        # Assume this is a zipped file. If it's not, it'll break and we can 
+        # move to the older method
+        try:
+            myFile = gzip.open(filename, 'rb')
+            output = cPickle.load(myFile)
+            myFile.close()
+            return output
+        except IOError, e:
+            # Most likely broke as it's not gzipped.
+            pass
+        myFile.close()
+        
         # Any other type of file
         try:
-            myFile = open(filename, 'r');
-            output = cPickle.load(myFile);
-            myFile.close();
-            return output;
+            myFile = open(filename, 'r')
+            output = cPickle.load(myFile)
+            myFile.close()
+            return output
         except BaseException, e:
-            print "An error occurred when attempting to read the file \"" + filename + "\"";
-            print "Error: " + str(e);
-            return False;
+            print "An error occurred when attempting to read the file \"" + filename + "\""
+            print "Error: " + str(e)
+            return False
             
 def writed(filename, *arg):
     """
@@ -82,11 +102,11 @@ def writed(filename, *arg):
         Returns True if succesful, otherwise False
         
     """
-    assert isinstance(filename, str), "The file name is required to be of type string.";
-    data = dict();
+    assert isinstance(filename, str), "The file name is required to be of type string."
+    data = dict()
     for i, j in enumerate(arg):
-        data['var' + str(i)] = j;
-    return write(filename, data, True);
+        data['var' + str(i)] = j
+    return write(filename, data, True)
 
 def append(filename, data, bypassParameterCheck = False):
     """
@@ -98,15 +118,15 @@ def append(filename, data, bypassParameterCheck = False):
         Returns True if succesful, otherwise False
                 
     """
-    assert isinstance(filename, str), "The file name is required to be of type string.";
+    assert isinstance(filename, str), "The file name is required to be of type string."
     assert isinstance(data, dict), "The input data is required to be a dictionary."
-    assert os.path.exists(filename), "The file to be append data to does not exist.";
+    assert os.path.exists(filename), "The file to be append data to does not exist."
     
     # Open the old file
-    oldData = read(filename);
+    oldData = read(filename)
     if data is False:
-        print "Could not open file " + filename + "to append data";
-        return False;
+        print "Could not open file " + filename + "to append data"
+        return False
     
     if not bypassParameterCheck:
         # Check the contents of the file for pre-existing variable names
@@ -114,13 +134,13 @@ def append(filename, data, bypassParameterCheck = False):
         for a in data:
             if oldData.has_key(a):
                 print "Key " + a + " already exists. Use .update method instead."
-                return False;
+                return False
     
     # Now append keys using update method
-    oldData.update(data);
+    oldData.update(data)
     
     # Old file has to be overwritten
-    return write(filename, oldData, True);
+    return write(filename, oldData, True)
 
 def appendd(filename, *arg):
     """
@@ -132,23 +152,23 @@ def appendd(filename, *arg):
         Returns True if succesful, otherwise False
         
     """
-    assert isinstance(filename, str), "The file name is required to be of type string.";
-    assert os.path.exists(filename), "The file to be append data to does not exist.";
+    assert isinstance(filename, str), "The file name is required to be of type string."
+    assert os.path.exists(filename), "The file to be append data to does not exist."
     
     # File needs to be opened in order to generate names
-    data = read(filename);
+    data = read(filename)
     if data is False:
-        print "Could not open file " + filename + "to append data";
-        return False;
+        print "Could not open file " + filename + "to append data"
+        return False
         
     # Check names
-    offset = 0;
+    offset = 0
     for i, j in enumerate(arg):
         while data.has_key('var' + str(i + offset)):
-            offset += 1; # Key already exists. Increment counter by 1
-        data['var' + str(i + offset)] = j;
+            offset += 1 # Key already exists. Increment counter by 1
+        data['var' + str(i + offset)] = j
     
-    return append(filename, data, True);
+    return append(filename, data, True)
 
 def update(filename, data):
     """
@@ -159,11 +179,11 @@ def update(filename, data):
         Returns True if succesful, otherwise False
         
     """
-    assert isinstance(filename, str), "The file name is required to be of type string.";
+    assert isinstance(filename, str), "The file name is required to be of type string."
     assert isinstance(data, dict), "The input data is required to be a dictionary."
-    assert os.path.exists(filename), "The file to be append data to does not exist.";
+    assert os.path.exists(filename), "The file to be append data to does not exist."
     
-    return append(filename, data, True);
+    return append(filename, data, True)
 
 def save(filename, *arg):
     """
@@ -175,29 +195,29 @@ def save(filename, *arg):
         Returns True if succesful, otherwise False
         
     """    
-    assert isinstance(filename, str), "The file name is required to be of type string.";
+    assert isinstance(filename, str), "The file name is required to be of type string."
     
-    data = dict();
-    foundData = False;
+    data = dict()
+    foundData = False
         
-    parentVars = sys._getframe(1).f_locals;
+    parentVars = sys._getframe(1).f_locals
     # Now it's a case of matching variable names and saving them
     for i in arg:
         # Check data type to ensure variable is string
-        if not isinstance(i, str): continue;
+        if not isinstance(i, str): continue
         # Split the string up in case it has other elements
-        currentArg = i.replace(' ', '').split(',');
+        currentArg = i.replace(' ', '').split(',')
         print currentArg
         for j in currentArg:
             # Check to see if the variable exists
             if parentVars.has_key(j):
                 # Exists
-                data[j] = parentVars[j];
-                foundData = True;
+                data[j] = parentVars[j]
+                foundData = True
             else:
-                print "Variable", str(j), "does not exist in the parent workspace.";
+                print "Variable", str(j), "does not exist in the parent workspace."
     if foundData:
         # Write data using predefined write
-        return write(filename, data, True);
+        return write(filename, data, True)
     else:
         print "Could not locate variables"
