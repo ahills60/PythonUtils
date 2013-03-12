@@ -4,8 +4,8 @@
 A simple Cython implementation of Matrix commands
 Uses an ndarray for a point implementation.
 $Author: andrew $
-$Rev: 142 $
-$Date: 2009-06-11 15:07:01 +0100 (Thu, 11 Jun 2009) $
+$Rev: 150 $
+$Date: 2009-09-17 21:40:27 +0100 (Thu, 17 Sep 2009) $
 """
 
 from c_numpy cimport import_array, ndarray
@@ -314,8 +314,8 @@ cdef class blockmat:
         
         cdef blockmat tempVar
         
-        tempVar = blockmat(self.rows, self.cols, self.offset)
-        tempVar.__quickSet(copy.deepcopy(self.blocks), self.start_row, self.start_col, self.end_row, self.end_col, self.diagonal_hit, self.gradients, self.reference, self.counter)
+        tempVar = blockmat(self.rows, self.cols, copy.deepcopy(self.offset))
+        tempVar.__quickSet(copy.deepcopy(self.blocks), copy.deepcopy(self.start_row), copy.deepcopy(self.start_col), copy.deepcopy(self.end_row), copy.deepcopy(self.end_col), copy.deepcopy(self.diagonal_hit), copy.deepcopy(self.gradients), copy.deepcopy(self.reference), copy.deepcopy(self.counter))
         
         return tempVar
     
@@ -634,7 +634,8 @@ cdef class blockmat:
         """
             a.transpose()
         
-            Returns a view of 'a' with axes tranposed.
+            Returns a view of 'a' with axes transposed.
+            
         """
         cdef int tempInt
         cdef list tempList
@@ -660,6 +661,7 @@ cdef class blockmat:
             a.trace()
             
             Return the sum along the diagonals of the block matrix
+            
         """
         cdef list refined
         cdef float result = 0.0
@@ -776,6 +778,7 @@ cdef class blockmat:
             a.diagonal()
             
             Returns the diagonal of the matrix.
+            
         """
         cdef ndarray output, value
         cdef list refined
@@ -966,17 +969,13 @@ cdef class nsblock:
             r_row, r_col = self.getCoordinates(row, column, block.shape)
             
             if r_row == -1:
-                print "Unable to add matrix. Size mismatch (row)."
-                return
+                raise SizeException("Unable to add matrix. Size mismatch (row).")
             elif r_row == -2:
-                print "Unable to add matrix. Add elements to previous rows before adding element here."
-                return
+                raise SizeException("Unable to add matrix. Add elements to previous rows before adding element here.")
             if r_col == -1:
-                print "Unable to add matrix. Size mismatch (col)."
-                return
+                raise SizeException("Unable to add matrix. Size mismatch (col).")
             elif r_col == -2:
-                print "Unable to add matrix. Add elements to previous columns before adding element here."
-                return
+                raise SizeException("Unable to add matrix. Add elements to previous columns before adding element here.")
             
             if row == len(self.rowInstance):
                 self.rowInstance.append(len(self.blockAddresses))
@@ -1074,7 +1073,7 @@ cdef class nsblock:
         cdef nsblock tempVar
         
         tempVar = nsblock(self.rows, self.cols)
-        tempVar.__quickSet(self.spmat.copy(), self.blockAddresses, self.blockIndex, self.blocksize, self.rowInstance, self.colInstance)
+        tempVar.__quickSet(self.spmat.copy(), copy.deepcopy(self.blockAddresses), copy.deepcopy(self.blockIndex), copy.deepcopy(self.blocksize), copy.deepcopy(self.rowInstance), copy.deepcopy(self.colInstance))
         
         return tempVar
     
@@ -1082,6 +1081,8 @@ cdef class nsblock:
         """
             Override the addition function for block matrices
         """
+        if self.shape() == (0, 0):
+            raise SizeException("NSBlock object is empty. Unable to add an empty object.")
         tempVar = self.copy()
         tempVar._add(y)
         return tempVar
@@ -1092,9 +1093,29 @@ cdef class nsblock:
         """
         if isinstance(y, type(self)):
             # Another block type
-            print "another block"
-        elif isinstance(y, ndarray):
-            print "np array"
+            if y.blockshape() == self.blockshape() or self.blockshape() == y.shape():
+                # Convert to a NumPy array and let the rest of the module take over
+                y = np.array(y)
+            else:
+                # The shapes don't match
+                raise SizeException("Size Mismatch between the two objects")
+        
+        if isinstance(y, ndarray):
+            # print "np array"
+            if y.shape == self.shape():
+                # The smaller of the two shapes
+                for row in range(y.shape[0]):
+                    for col in range(y.shape[1]):
+                        self[row,col] += y[row,col];
+            elif y.shape == self.blockshape():
+                # The larger of the two shapes
+                for row in range(self.shape()[0]):
+                    startingPointRow = self.spmat.getStartingPoint(self.blockIndex[self.rowInstance[row]])[0]
+                    for col in range(self.shape()[1]):
+                        startingPointCol = self.spmat.getStartingPoint(self.blockIndex[self.rowInstance[col]])[1]
+                        self[row,col] += y[startingPointRow:startingPointRow+self[row,col].shape[0],startingPointCol:startingPointCol+self[row,col].shape[1]];
+            else:
+                raise SizeException("Size Mismatch between the two objects.")
         else:
             # Anything else: forward to sparse calculations
             self.spmat = self.spmat + y
@@ -1103,6 +1124,8 @@ cdef class nsblock:
         """
             Override the reflective addition function for block matrices
         """
+        if self.shape() == (0, 0):
+            raise SizeException("NSBlock object is empty. Unable to add an empty object.")
         tempVar = self.copy()
         tempVar._radd(y)
         return tempVar
@@ -1110,9 +1133,29 @@ cdef class nsblock:
     cpdef _radd(self, y):
         if isinstance(y, type(self)):
             # Another block type
-            print "another block"
-        elif isinstance(y, ndarray):
-            print "np array"
+            if y.blockshape() == self.blockshape() or self.shape() == y.blockshape():
+                # Convert to a NumPy array and let the rest of the module take over
+                y = np.array(y)
+            else:
+                # The shapes don't match
+                raise SizeException("Size Mismatch between the two objects")
+        
+        if isinstance(y, ndarray):
+            # print "np array"
+            if y.shape == self.shape():
+                # The smaller of the two shapes
+                for row in range(y.shape[0]):
+                    for col in range(y.shape[1]):
+                        self[row,col] += y[row,col];
+            elif y.shape == self.blockshape():
+                # The larger of the two shapes
+                for row in range(self.shape()[0]):
+                    startingPointRow = self.spmat.getStartingPoint(self.blockIndex[self.rowInstance[row]])[0]
+                    for col in range(self.shape()[1]):
+                        startingPointCol = self.spmat.getStartingPoint(self.blockIndex[self.rowInstance[col]])[1]
+                        self[row,col] += y[startingPointRow:startingPointRow+self[row,col].shape[0],startingPointCol:startingPointCol+self[row,col].shape[1]];
+            else:
+                raise SizeException("Size Mismatch between the two objects")
         else:
             # Anything else: forward to sparse calculations
             self.spmat = y + self.spmat
@@ -1131,10 +1174,30 @@ cdef class nsblock:
         """
         if isinstance(y, type(self)):
             # Another block type
-            print "another block"
-        elif isinstance(y, ndarray):
+            if y.blockshape() == self.blockshape() or self.blockshape() == y.shape():
+                # Convert to a NumPy array and let the rest of the module take over
+                y = np.array(y)
+            else:
+                # The shapes don't match
+                raise SizeException("Size Mismatch between the two objects")
+        
+        if isinstance(y, ndarray):
             # Numpy array
-            print "np array"
+            # print "np array"
+            if y.shape == self.shape():
+                # The smaller of the two shapes
+                for row in range(y.shape[0]):
+                    for col in range(y.shape[1]):
+                        self[row,col] -= y[row,col];
+            elif y.shape == self.blockshape():
+                # The larger of the two shapes
+                for row in range(self.shape()[0]):
+                    startingPointRow = self.spmat.getStartingPoint(self.blockIndex[self.rowInstance[row]])[0]
+                    for col in range(self.shape()[1]):
+                        startingPointCol = self.spmat.getStartingPoint(self.blockIndex[self.rowInstance[col]])[1]
+                        self[row,col] -= y[startingPointRow:startingPointRow+self[row,col].shape[0],startingPointCol:startingPointCol+self[row,col].shape[1]];
+            else:
+                raise SizeException("Size Mismatch between the two objects.")
         else:
             # Anything else: forward to sparse calculations
             self.spmat = self.spmat - y
@@ -1153,10 +1216,30 @@ cdef class nsblock:
         """
         if isinstance(y, type(self)):
             # Another block type
-            print "another block"
-        elif isinstance(y, ndarray):
+            if y.blockshape() == y.blockshape() or self.shape() == y.blockshape():
+                # Convert to a NumPy array and let the rest of the module take over
+                y = np.array(y)
+            else:
+                # The shapes don't match
+                raise SizeException("Size Mismatch between the two objects")
+        
+        if isinstance(y, ndarray):
             # Numpy array
-            print "np array"
+            # print "np array"
+            if y.shape == self.shape():
+                # The smaller of the two shapes
+                for row in range(y.shape[0]):
+                    for col in range(y.shape[1]):
+                        self[row,col] = y[row,col] - self[row,col];
+            elif y.shape == self.blockshape():
+                # The larger of the two shapes
+                for row in range(self.shape()[0]):
+                    startingPointRow = self.spmat.getStartingPoint(self.blockIndex[self.rowInstance[row]])[0]
+                    for col in range(self.shape()[1]):
+                        startingPointCol = self.spmat.getStartingPoint(self.blockIndex[self.rowInstance[col]])[1]
+                        self[row,col] = y[startingPointRow:startingPointRow+self[row,col].shape[0],startingPointCol:startingPointCol+self[row,col].shape[1]] - self[row,col];
+            else:
+                raise SizeException("Size Mismatch between the two objects.")
         else:
             # Anything else: forward to sparse calculations
             self.spmat = y - self.spmat
@@ -1178,7 +1261,22 @@ cdef class nsblock:
             print "another block"
         elif isinstance(y, ndarray):
             # Numpy array
-            print "np array"
+            # print "np array"
+            if y.shape == self.shape():
+                # The smaller of the two shapes
+                for row in range(y.shape[0]):
+                    for col in range(y.shape[1]):
+                        self[row,col] *= y[row,col];
+            elif y.shape == self.blockshape():
+                # The larger of the two shapes: Revert to normal matrix multiplication
+                # for row in range(self.shape()[0]):
+                #     startingPointRow = self.spmat.getStartingPoint(self.blockIndex[self.rowInstance[row]])[0]
+                #     for col in range(self.shape()[1]):
+                #         startingPointCol = self.spmat.getStartingPoint(self.blockIndex[self.rowInstance[col]])[1]
+                #         self[row,col] += y[startingPointRow:startingPointRow+self[row,col].shape[0],startingPointCol:startingPointCol+self[row,col].shape[1]];
+                raise NotImplementedError("This type of multiplication has not been created yet")
+            else:
+                raise SizeException("Size Mismatch between the two objects.")
         else:
             # Anything else: forward to sparse calculations
             self.spmat = self.spmat * y
@@ -1200,7 +1298,22 @@ cdef class nsblock:
             print "another block"
         elif isinstance(y, ndarray):
             # Numpy array
-            print "np array"
+            # print "np array"
+            if y.shape == self.shape():
+                # The smaller of the two shapes
+                for row in range(y.shape[0]):
+                    for col in range(y.shape[1]):
+                        self[row,col] *= y[row,col];
+            elif y.shape == self.blockshape():
+                # The larger of the two shapes: Revert to normal matrix multiplication
+                # for row in range(self.shape()[0]):
+                #     startingPointRow = self.spmat.getStartingPoint(self.blockIndex[self.rowInstance[row]])[0]
+                #     for col in range(self.shape()[1]):
+                #         startingPointCol = self.spmat.getStartingPoint(self.blockIndex[self.rowInstance[col]])[1]
+                #         self[row,col] += y[startingPointRow:startingPointRow+self[row,col].shape[0],startingPointCol:startingPointCol+self[row,col].shape[1]];
+                raise NotImplementedError("This type of multiplication has not been created yet")
+            else:
+                raise SizeException("Size Mismatch between the two objects.")
         else:
             # Anything else: forward to sparse calculations
             self.spmat = y * self.spmat
@@ -1222,7 +1335,22 @@ cdef class nsblock:
             print "another block"
         elif isinstance(y, ndarray):
             # Numpy array
-            print "np array"
+            # print "np array"
+            if y.shape == self.shape():
+                # The smaller of the two shapes
+                for row in range(y.shape[0]):
+                    for col in range(y.shape[1]):
+                        self[row,col] /= y[row,col];
+            elif y.shape == self.blockshape():
+                # The larger of the two shapes: Revert to normal matrix division
+                # for row in range(self.shape()[0]):
+                #     startingPointRow = self.spmat.getStartingPoint(self.blockIndex[self.rowInstance[row]])[0]
+                #     for col in range(self.shape()[1]):
+                #         startingPointCol = self.spmat.getStartingPoint(self.blockIndex[self.rowInstance[col]])[1]
+                #         self[row,col] += y[startingPointRow:startingPointRow+self[row,col].shape[0],startingPointCol:startingPointCol+self[row,col].shape[1]];
+                raise NotImplementedError("This type of division has not been created yet")
+            else:
+                raise SizeException("Size Mismatch between the two objects.")
         else:
             # Anything else: forward to sparse calculations
             self.spmat = self.spmat / y
@@ -1244,7 +1372,22 @@ cdef class nsblock:
             print "another block"
         elif isinstance(y, ndarray):
             # Numpy array
-            print "np array"
+            # print "np array"
+            if y.shape == self.shape():
+                # The smaller of the two shapes
+                for row in range(y.shape[0]):
+                    for col in range(y.shape[1]):
+                        self[row,col] = y[row,col] / self[row,col];
+            elif y.shape == self.blockshape():
+                # The larger of the two shapes: Revert to normal matrix division
+                # for row in range(self.shape()[0]):
+                #     startingPointRow = self.spmat.getStartingPoint(self.blockIndex[self.rowInstance[row]])[0]
+                #     for col in range(self.shape()[1]):
+                #         startingPointCol = self.spmat.getStartingPoint(self.blockIndex[self.rowInstance[col]])[1]
+                #         self[row,col] += y[startingPointRow:startingPointRow+self[row,col].shape[0],startingPointCol:startingPointCol+self[row,col].shape[1]];
+                raise NotImplementedError("This type of division has not been created yet")
+            else:
+                raise SizeException("Size Mismatch between the two objects.")
         else:
             # Anything else: forward to sparse calculations
             self.spmat = y / self.spmat
@@ -1355,7 +1498,44 @@ cdef class nsblock:
         self.blockAddresses = tempList
 
         tempList = [(element[1], element[0]) for element in self.blocksize]
-        self.blocksize = tempList        
+        self.blocksize = tempList
+    
+    cpdef float trace(self):
+        """
+            a.trace()
+        
+            Return the sum along the diagonals of the block matrix
+        
+        """
+        return self.spmat.trace()
+    
+    # 
+    # cpdef transposealt(self):
+    #     """
+    #         a.transposealt()
+    # 
+    #         Alternative transpose of the block matrix. Transpose the blocks only - not the block contents.
+    #     """
+    #     cdef list tempList
+    # 
+    #     self.spmat.transpose()
+    # 
+    #     tempList = self.rowInstance
+    #     self.rowInstance = self.colInstance
+    #     self.colInstance = tempList
+    # 
+    #     tempList = [(element[1], element[0]) for element in self.blockAddresses]
+    #     self.blockAddresses = tempList
+    # 
+    #     tempList = [(element[1], element[0]) for element in self.blocksize]
+    #     self.blocksize = tempList
+        
+    def directsum(self, *args):
+        """
+            Add a list of matrices to the diagonal
+        """
+        for blockIndex, block in enumerate(args):
+            self[blockIndex, blockIndex] = block
     
     cpdef tuple shape(self):
         """
@@ -1461,6 +1641,17 @@ cdef class nsblock:
         else:
             raise TypeError("Unrecognised index type")
     
+
+class SizeException(Exception):
+    """
+        Exception class used to define specific issues with regards to size.
+        Extends the default Exception class.
+    """
+    def __init__(self, value):
+        self.value = value
+    
+    def __str__(self):
+        return repr(self.value)
 
 cpdef blockmat np2bm(ndarray array, bint autoFind = True, float sparseValue = 0.0):
     """
