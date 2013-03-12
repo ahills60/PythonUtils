@@ -207,7 +207,6 @@ def save(filename, *arg):
         if not isinstance(i, str): continue
         # Split the string up in case it has other elements
         currentArg = i.replace(' ', '').split(',')
-        print currentArg
         for j in currentArg:
             # Check to see if the variable exists
             if parentVars.has_key(j):
@@ -221,3 +220,24 @@ def save(filename, *arg):
         return write(filename, data, True)
     else:
         print "Could not locate variables"
+
+def load(filename):
+    """
+        Load extracts the variables stored within the given filename and stores then within
+        the parent workspace.
+        
+        Usage: load('filename.sav')
+        
+        Returns True if successful, otherwise False
+    """
+    
+    assert isinstance(filename, str), "The filename is required to be of type string"
+    assert os.path.exists(filename), "The given filename does not exist."
+    
+    fromFile = read(filename) # Load to a variable
+    if isinstance(fromFile, dict):
+        # The variable is a dictionary. Proceed to update the internal variable list...
+        sys._getframe(1).f_locals.update(fromFile)
+        return True
+    else:
+        return False
