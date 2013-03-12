@@ -1,9 +1,5 @@
-# quickio.py
-#
-# $Author: andrew $
-# $Date: 2009-05-19 11:57:22 +0100 (Tue, 19 May 2009) $
-
 import cPickle, os, sys
+from scipy import io
 
 def write(filename, data, overwrite=False):
     """
@@ -23,15 +19,26 @@ def write(filename, data, overwrite=False):
     if os.path.exists(filename):
         os.remove(filename);
     
-    try:
-        myFile = open(filename, 'w');
-        cPickle.dump(data, myFile);
-        myFile.close();
-        return True;
-    except BaseException, e:
-        print "An error occurred when attempting to write to the file \"" + filename + "\"";
-        print "Error: " + str(e);
-        return False;
+    if filename.lower().endswith('.mat'):
+        # MAT file
+        try:
+            io.savemat(filename, data, False)
+            return True
+        except BaseException, e:
+            print "An error occurred when attempting to write to the file \"" + filename + "\""
+            print "Error: " + str(e)
+            return False
+    else:
+        # Any other type of file    
+        try:
+            myFile = open(filename, 'w');
+            cPickle.dump(data, myFile);
+            myFile.close();
+            return True;
+        except BaseException, e:
+            print "An error occurred when attempting to write to the file \"" + filename + "\"";
+            print "Error: " + str(e);
+            return False;
 
 def read(filename):
     """
@@ -45,16 +52,26 @@ def read(filename):
     assert isinstance(filename, str), "The file name is required to be of type string.";
     assert os.path.exists(filename), "The file to read does not exist.";
     
-    try:
-        myFile = open(filename, 'r');
-        output = cPickle.load(myFile);
-        myFile.close();
-        return output;
-    except BaseException, e:
-        print "An error occurred when attempting to read the file \"" + filename + "\"";
-        print "Error: " + str(e);
-        return False;
-
+    if filename.lower().endswith('.mat'):
+        # MAT file
+        try:
+            return io.loadmat(filename)
+        except BaseException, e:
+            print "An error occurred when attempting to read the file \"" + filename + "\"";
+            print "Error: " + str(e);
+            return False;
+    else:
+        # Any other type of file
+        try:
+            myFile = open(filename, 'r');
+            output = cPickle.load(myFile);
+            myFile.close();
+            return output;
+        except BaseException, e:
+            print "An error occurred when attempting to read the file \"" + filename + "\"";
+            print "Error: " + str(e);
+            return False;
+            
 def writed(filename, *arg):
     """
         Writed automatically assigns variable names to the input data and saves the data
