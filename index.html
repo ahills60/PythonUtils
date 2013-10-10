@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset='utf-8' />
+    <meta http-equiv="X-UA-Compatible" content="chrome=1" />
+    <meta name="description" content="PythonUtils : Useful Python functions" />
+
+    <link rel="stylesheet" type="text/css" media="screen" href="stylesheets/stylesheet.css">
+
+    <title>PythonUtils</title>
+  </head>
+
+  <body>
+
+    <!-- HEADER -->
+    <div id="header_wrap" class="outer">
+        <header class="inner">
+          <a id="forkme_banner" href="https://github.com/ahills60/PythonUtils">View on GitHub</a>
+
+          <h1 id="project_title">PythonUtils</h1>
+          <h2 id="project_tagline">Useful Python functions</h2>
+
+            <section id="downloads">
+              <a class="zip_download_link" href="https://github.com/ahills60/PythonUtils/zipball/master">Download this project as a .zip file</a>
+              <a class="tar_download_link" href="https://github.com/ahills60/PythonUtils/tarball/master">Download this project as a tar.gz file</a>
+            </section>
+        </header>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div id="main_content_wrap" class="outer">
+      <section id="main_content" class="inner">
+        <h1>
+<a name="pythonutils" class="anchor" href="#pythonutils"><span class="octicon octicon-link"></span></a>PythonUtils</h1>
+
+<p>PythonUtils provides useful Python functions including file reading and writing tools. </p>
+
+<h2>
+<a name="libraries" class="anchor" href="#libraries"><span class="octicon octicon-link"></span></a>Libraries</h2>
+
+<p>PythonUtils comes with various Python but are not bundled together. Instead, they are currently partitioned into separate directories. </p>
+
+<h3>
+<a name="iotools" class="anchor" href="#iotools"><span class="octicon octicon-link"></span></a>IOTools</h3>
+
+<p>IOTools contains <code>quickio.py</code> which provides numerous functions for reading and writing files. The <code>quickio</code> class can read and write MATLAB <code>mat</code> files providing the file extension is set to <code>.mat</code>. Commands to <code>load</code> and <code>save</code> mimic MATLAB's behaviour.</p>
+
+<ul>
+<li>
+<code>quickio.load(filename)</code> extracts the contents of the file into the parent workspace</li>
+<li>
+<code>quickio.save(filename, *args)</code> saves the variables named in <code>args</code> into a file. Variables can be separated with commas within a single string or as multiple arguments.</li>
+<li>
+<code>quickio.read(filename)</code> returns the contents of the file as a dictionary object.</li>
+<li>
+<code>quickio.write(filename, dict)</code> saves the contents of the dictionary object <code>dict</code> as a file.</li>
+</ul><p>The <code>quickio</code> library uses cPickle to convert variables into saveable objects. The resultant pickled object is compressed using the <code>gzip</code> library and saved as a file. MATLAB files are written and read using functions provided by <code>scipy.io</code>.</p>
+
+<h3>
+<a name="matrixtools" class="anchor" href="#matrixtools"><span class="octicon octicon-link"></span></a>MatrixTools</h3>
+
+<p>MatrixTools was a series of classes built in Cython to handle block and sparse block matrices using <code>numpy</code> as a foundation. Progress within this project has stagnated but may be resumed at a later time. It is included as it contains code that may be useful for other projects.</p>
+
+<h3>
+<a name="queueutils" class="anchor" href="#queueutils"><span class="octicon octicon-link"></span></a>QueueUtils</h3>
+
+<p>QueueUtils are some classes that can be used to distribute tasks across multiple computers. The server class <code>QueueServer</code> handles and manages jobs that are issued to clients using the <code>QueueClient</code> class. </p>
+
+<p>Rudimentary job handle is performed by the server such that jobs that were assigned but remain incomplete after a defined time are placed back onto the job list and reassigned.</p>
+
+<ul>
+<li>
+<code>QueueServer.py</code> provides basis server functionality that is used to distribute data to clients. It can also receive results from clients and save them on the server. Basic job handling and management is performed by the <code>QueueServer</code> class.</li>
+<li>
+<code>QueueClient.py</code> provides tools to request data from a server and send results back to the server.</li>
+</ul><h3>
+<a name="template-builder" class="anchor" href="#template-builder"><span class="octicon octicon-link"></span></a>Template Builder</h3>
+
+<p>The template builder script <code>build.py</code> constructs a file by taking the contents of multiple files as instructed by a master template file. Technically, the same behaviour can be achieved by calling a functions or macros within other files, but this template builder can remove some of the overheads this can incur. Indents are preserved meaning the template builder can be used by languages such as Python.</p>
+
+<p>The master file can link to another file by declaring a comment with the instructions: <code>INPUTFILE:filename.ext</code>. For instance, in the following Python example, the master script <code>testscript.py</code> links to <code>innerloop.py</code>:</p>
+
+<div class="highlight highlight-python"><pre><span class="c"># This is a test script</span>
+<span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">):</span>
+    <span class="c">#INPUTFILE:innerloop.py</span>
+<span class="k">print</span> <span class="s">"End of script."</span>
+</pre></div>
+
+<p>If the contents of <code>innerloop.py</code> contained the following Python code:</p>
+
+<div class="highlight highlight-python"><pre><span class="k">print</span> <span class="s">"The result here is..."</span>
+<span class="k">print</span> <span class="n">a</span>
+</pre></div>
+
+<p>Then the resulting constructed script using <code>build.py testscript.py compiledscript.py</code> will be:</p>
+
+<div class="highlight highlight-python"><pre><span class="c"># This is a test script</span>
+<span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">):</span>
+    <span class="k">print</span> <span class="s">"The result here is..."</span>
+    <span class="k">print</span> <span class="n">a</span>
+<span class="k">print</span> <span class="s">"End of script."</span>
+</pre></div>
+
+<p>Currently the template builder supports the following languages:</p>
+
+<ul>
+<li>MATLAB</li>
+<li>LaTeX</li>
+<li>Python</li>
+</ul><p><em>Note: The template builder does not handle nested <code>INPUTFILE</code> requests: only the master file is processed. A workaround would be to perform further iterations of <code>build.py</code> on the constructed file.</em></p>
+      </section>
+    </div>
+
+    <!-- FOOTER  -->
+    <div id="footer_wrap" class="outer">
+      <footer class="inner">
+        <p class="copyright">PythonUtils maintained by <a href="https://github.com/ahills60">ahills60</a></p>
+        <p>Published with <a href="http://pages.github.com">GitHub Pages</a></p>
+      </footer>
+    </div>
+
+    
+
+  </body>
+</html>
