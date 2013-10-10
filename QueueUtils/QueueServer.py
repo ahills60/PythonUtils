@@ -1,3 +1,11 @@
+"""
+A simple implementation of a server that distributes variables to clients
+that provide the correct ID
+$Author: andrew $
+$Rev: 167 $
+$Date: 2009-11-03 14:32:49 +0000 (Tue, 03 Nov 2009) $
+"""
+
 import os
 import socket
 import multiprocessing
@@ -9,14 +17,17 @@ import copy
 
 class QueueServer:
     
-    def __init__(self, appID, listenPortNumber = 29382, bufferSize = 4096, maintenanceTime = 30, transmissionType = 2):
+    def __init__(self, appID, listenPortNumber = 29382, bufferSize = 4096, maintenanceTime = 30, AutoResume = True, transmissionType = 2):
         """
-            QueueServer(appID, listenPortNumber = 29382, bufferSize = 4096, maintenanceTime = 30)
+            QueueServer(appID, listenPortNumber = 29382, bufferSize = 4096, maintenanceTime = 30, AutoResume = True)
             
             An AppID should be specified to ensure the correct variables are exchanged should many
             instances of the Server and Clients be operational within a networked enviroment.
             The maintenanceTime dictates how many seconds can pass before the maintenanceThread
             executes to clean up 'forgotten' threads that exceed the timeThreshold variable.
+            Auto resume (AutoResume) is set to True as default so the server will open any auto
+            resume file it finds at the last save point. This can be disabled by setting the
+            variable AutoResume to False.
             
         """
         self.listenPortNumber = listenPortNumber
@@ -39,6 +50,7 @@ class QueueServer:
         self.timeThreshold = 12*60*60
         self.transmissionType = transmissionType
         self.SAVE_PATH = "results/"
+        self.AutoResume = AutoResume
     
     def ServerThreadOpen(self):
         """
@@ -74,7 +86,7 @@ class QueueServer:
         print "    Server child thread active..."
         data = clientSocket.recv(self.bufferSize)
         if str(self.appID) != data:
-            print "QueueServer\ServerThread: Invalid AppID from remote computer."
+            print "QueueServer\\ServerThread: Invalid AppID from remote computer."
             clientSocket.send("Invalid AppID")
             clientSocket.close()
             self.ServerThreadClose()
@@ -99,7 +111,7 @@ class QueueServer:
         # Attempt to get a lock of the QueueItems object
         if not self.QueueItemsLock.acquire(): 
             # Could not acquire a lock
-            print "QueueServer\ServerThread: An error occurred when trying to get a lock of the QueueItems resource."
+            print "QueueServer\\ServerThread: An error occurred when trying to get a lock of the QueueItems resource."
             self.ServerThreadClose()
             return None
         print "    Lock acquired"
@@ -126,7 +138,7 @@ class QueueServer:
                         if breakPoints[ind] <= breakPoints[ind + 1]:
                             while variables[breakPoints[ind + 1]] is '.': breakPoints[ind + 1] += 1
                         if breakPoints[ind + 1] - breakPoints[ind - 1] > self.bufferSize:
-                            print "QueueServer\ServerThread: Error sending. Unable to find a good break point in the data."
+                            print "QueueServer\\ServerThread: Error sending. Unable to find a good break point in the data."
                             self.QueueItemsLock.release() # Release the lock
                             self.ServerThreadClose()
                             return None
@@ -146,7 +158,7 @@ class QueueServer:
                             print "    Sending text Fragment..."
                             clientSocket.send(txtFragment)
                     else:
-                        print "QueueServer\ServerThread: Unable to agree with size to send"
+                        print "QueueServer\\ServerThread: Unable to agree with size to send"
             
                 print "    Releasing lock..."
                 self.QueueItemsLock.release() # Release the lock
@@ -164,6 +176,12 @@ class QueueServer:
                 self.ServerThreadClose()
                 self.ServerThreadsOpenCheck.set(1)
                 return None
+        elif serviceType == "RETRV":
+            # For Receiving files from the server
+            print "Receiving Filename"
+            filename = clientSocket.recv(self.bufferSize)
+            
+            
         elif serviceType == "COMPL":
             # For informing the server that a task has completed
             print "Receiving UUID from client..."
@@ -307,13 +325,13 @@ class QueueServer:
                         if time.time() - self.QueueTime[item] > self.timeThreshold:
                             # Time Threshold Exceeded
                             itemsToRemove.append(item)
-                            print "QueueServer\ServerMaintenanceThread: Queue time threshold exceeded. Adding back to queue..."
+                            print "QueueServer\\ServerMaintenanceThread: Queue time threshold exceeded. Adding back to queue..."
                             self.QueueItems.append(self.QueueHistory[item])
                     if len(itemsToRemove) > 0:
                         # Clean up the history
                         itemsToRemove.reverse() # Reverse the removal process so the later indices remain unchanged (considering it's in ascending order)
                         for item in itemsToRemove:
-                            print "QueueServer\ServerMaintenanceThread: Cleaning up outstanding queue history."
+                            print "QueueServer\\ServerMaintenanceThread: Cleaning up outstanding queue history."
                             self.QueueHistory.pop(item);
                             self.QueueTime.pop(item);
                             self.QueueDone.pop(item);
@@ -325,14 +343,15 @@ class QueueServer:
                 else:
                     # There aren't any outstanding jobs in the queue. Check the main queue
                     if len(self.QueueItems) == 0:
-                        print "QueueServer\ServerMaintenanceThread: Main queue is empty and there are no outstanding jobs."
+                        print "QueueServer\\ServerMaintenanceThread: Main queue is empty and there are no outstanding jobs."
                         self.EndProgram.set()
                         continue
             if self.UpdatesMade.get() > 0:
-                print "QueueServer\ServerMaintenanceThread: Attempting to write variables following a Queue update..."
+                print "QueueServer\\ServerMaintenanceThread: Attempting to write variables following a Queue update..."
                 quickio.write(str(appID) + ".sav", {'QueueHistory': self.QueueHistory, 'QueueTime': self.QueueTime, 'QueueDone': self.QueueDone, 'QueueItID': self.QueueItID, 'QueueClID': self.QueueClID, 'QueueItems': self.QueueItems}, True)
                 self.UpdatesMade.set(0) # Reset the number of changes made
-                print "QueueServer\ServerMaintenanceThread: Write complete."
+                print "QueueServer\\ServerMaintenanceThread: Write complete."
+                print "\nQueueServer\\ServerMaintenanceThread: Status update: " + str(len(self.QueueItems)) + " items in the queue, " + str(len(itemsToRemove)) + " items moved back to the Queue, " + str(len(queueIndices) - len(itemsToRemove)) + " items being processed, and " + str(len(self.QueueHistory) - len(queueItems) + len(itemsToRemove)) + " completed.\n"
             # Now get this thread to sleep for a custom time (seconds)
             time.sleep(self.maintenanceTime)
         
@@ -344,6 +363,17 @@ class QueueServer:
             The main part of the code that initates the server connection
         """
         # Start Server Maintenance Thread
+        
+        if os.path.exists(str(self.appID) + ".sav") and self.AutoResume:
+            print "Loading presaved state. "
+            variables = quickio.read(str(self.appID) + ".sav")
+            self.QueueHistory.extend(variables['QueueHistory'])
+            self.QueueTime.extend(variables['QueueTime'])
+            self.QueueDone.extend(variables['QueueDone'])
+            self.QueueItID.extend(variables['QueueItID'])
+            self.QueueClID.extend(variables['QueueClID'])
+            self.QueueItems.extend(variables['QueueItems'])
+        
         print "Starting Server Maintenance thread..."
         multiprocessing.Process(target=self.ServerMaintenanceThread).start()
         
@@ -367,7 +397,7 @@ class QueueServer:
             
             # Start a child process to deal with connection
             multiprocessing.Process(target=self.ServerThread, args=(copy.copy(clientSocket), copy.copy(Address))).start()
-        print "QueueServer\StartServer: End Program Acknowledged"
+        print "QueueServer\\StartServer: End Program Acknowledged"
         while self.ServerThreadsOpen.get() > 0 or len(multiprocessing.process.active_children()) > 1 or self.ServerThreadsOpenCheck.get() == 0:
             pass # Wait until any child threads are freed up
         serverSocket.close()

@@ -1,3 +1,11 @@
+"""
+A simple implementation of a Client that receives variables from a server and
+informs the server of a finished job, in addition to optionally uploading data.
+$Author: andrew $
+$Rev: 167 $
+$Date: 2009-11-03 14:32:49 +0000 (Tue, 03 Nov 2009) $
+"""
+
 import cPickle
 import socket
 import uuid
@@ -51,7 +59,7 @@ class QueueClient:
         print "Receiving Data..."
         data = serverSocket.recv(self.bufferSize)
         if data == "Invalid AppID":
-            print "QueueClient\GetNewParameters: Received Invalid AppID response from Server"
+            print "QueueClient\\GetNewParameters: Received Invalid AppID response from Server"
             serverSocket.close()
             serverSocket = None
             return -1
@@ -72,7 +80,7 @@ class QueueClient:
         
         if data == "EOQ":
             # End of Queue
-            print "QueueClient\GetNewParameters: Received End of Queue response from Server"
+            print "QueueClient\\GetNewParameters: Received End of Queue response from Server"
             serverSocket.close
             return -2
         
@@ -124,6 +132,11 @@ class QueueClient:
             in either the handshaking of the AppID or transfer, then a False is returned.
             Otherwise a True is returned.
         """
+        
+        if self.CurrentJobUUID == "":
+            print "Unable to send a Job Complete command when a job hasn't started."
+            return False
+        
         # Contact server to Send results if there are any
         serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         
@@ -139,7 +152,7 @@ class QueueClient:
         print "Receiving Data..."
         data = serverSocket.recv(self.bufferSize)
         if data == "Invalid AppID":
-            print "QueueClient\JobComplete: Received Invalid AppID response from Server"
+            print "QueueClient\\JobComplete: Received Invalid AppID response from Server"
             serverSocket.close()
             serverSocket = None
             return False
@@ -168,6 +181,7 @@ class QueueClient:
             # No results to send
             serverSocket.send("Done")
             serverSocket.close()
+            self.CurrentJobUUID = ""
             return True
         else:
             # Has a result but it's not in the dictionary object. Quickly wrap it...
@@ -202,7 +216,7 @@ class QueueClient:
                 if breakPoints[ind] <= breakPoints[ind + 1]:
                     while results[breakPoints[ind + 1]] is '.': breakPoints[ind + 1] += 1
                 if breakPoints[ind + 1] - breakPoints[ind - 1] > self.bufferSize:
-                    print "QueueClient\JobComplete: Error sending. Unable to find a good break point in the data."
+                    print "QueueClient\\JobComplete: Error sending. Unable to find a good break point in the data."
                     return False
                 txtFragment = results[breakPoints[ind]:breakPoints[ind+1]]
                 print "    Sending text Fragment..."
@@ -220,15 +234,72 @@ class QueueClient:
                     print "    Sending text Fragment..."
                     serverSocket.send(txtFragment)
             else:
-                print "QueueClient\JobComplete: Unable to agree with size to send"
+                print "QueueClient\\JobComplete: Unable to agree with size to send"
         data = serverSocket.recv(self.bufferSize)
         
         if data == "OK":
             print "Data saved successfully."
+            self.CurrentJobUUID = ""
             return True
         else:
             print "An error occurred. Message received from server:" + data
             return False
+    
+    def GetFile(self, filename = None):
+        """
+            GetFile(filename)
+        """
+        
+        if filename is None:
+            print "File not defined"
+            return False
+        
+        # Contact server to Send results if there are any
+        serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        
+        print "Attempting to connect to the server..."
+        ADDR = (self.serverAddress, self.serverPort)
+        
+        print "Attempting to connect to address..."
+        serverSocket.connect(ADDR)
+        
+        print "Sending AppID to server..."
+        serverSocket.send(str(self.appID))
+        
+        print "Receiving Data..."
+        data = serverSocket.recv(self.bufferSize)
+        if data == "Invalid AppID":
+            print "QueueClient\\GetFile: Received Invalid AppID response from Server"
+            serverSocket.close()
+            serverSocket = None
+            return False
+        
+        print "Sending Client UUID to server..."
+        serverSocket.send(self.QueueUUID)
+        
+        print "Receiving Transaction UUID..."
+        transUUID = serverSocket.recv(self.bufferSize)
+        
+        print "Transaction UUID is " + transUUID
+        
+        serverSocket.send("RETRV")
+        
+        serverSocket.send(filename)
+        
+        serverReply = serverSocket.recv(self.bufferSize)
+        
+        if not serverReply == "OK":
+            # was not ok
+            print "QueueClient\\GetFile: Error getting file. Status from server: " + serverReply
+            serverSocket.close()
+            serverSocket = None
+            return False
+        
+        # File has been found. Should receive now.
+        
+        serverSocket.send("GO")
+        
+        
     
 if __name__ == "__main__":
     print "Creating new Client object..."
